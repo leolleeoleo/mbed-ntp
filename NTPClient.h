@@ -29,8 +29,6 @@ SOFTWARE.
 #define NTP_DEFAULT_PORT 123
 #define NTP_DEFAULT_TIMEOUT 4000
 
-#include "api/socket.h"
-
 /** NTP Client to update the mbed's RTC using a remote time server
 *
 */

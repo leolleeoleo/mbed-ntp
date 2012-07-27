@@ -21,7 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#define __DEBUG__ 4 //Maximum verbosity
+#define __DEBUG__ 0 //Disabled
 #ifndef __MODULE__
 #define __MODULE__ "NTPClient.cpp"
 #endif
@@ -29,6 +29,8 @@ SOFTWARE.
 #include "core/fwk.h"
 
 #include "NTPClient.h"
+
+#include "UDPSocket.h"
 
 #include "mbed.h" //time() and set_time()
 
@@ -45,56 +47,16 @@ NTPClient::NTPClient()
 
 int NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
 {
-  struct sockaddr_in serverAddr;
-
-  std::memset(&serverAddr, 0, sizeof(struct sockaddr_in));
-
 #if __DEBUG__ >= 3
   time_t ctTime;
   ctTime = time(NULL);
   INFO("Time is set to (UTC): %s", ctime(&ctTime));
 #endif
 
-  //Resolve DNS if needed
-  if(serverAddr.sin_addr.s_addr == 0)
-  {
-    DBG("Resolving DNS address or populate hard-coded IP address");
-    struct hostent *server = socket::gethostbyname(host);
-    if(server == NULL)
-    {
-      return NET_NOTFOUND; //Fail
-    }
-    memcpy((char*)&serverAddr.sin_addr.s_addr, (char*)server->h_addr_list[0], server->h_length);
-  }
-
-  serverAddr.sin_family = AF_INET;
-  serverAddr.sin_port = htons(port);
-
-  //Now create & bind socket
+  //Create & bind socket
   DBG("Creating socket");
-  int sock  = socket::socket(AF_INET, SOCK_DGRAM, 0); //UDP socket
-  if (sock < 0)
-  {
-    ERR("Could not create socket");
-    return NET_OOM;
-  }
-  DBG("Handle is %d",sock);
-
-  //Create local address
-  struct sockaddr_in localhostAddr;
-
-  std::memset(&localhostAddr, 0, sizeof(struct sockaddr_in));
-
-  localhostAddr.sin_family = AF_INET;
-  localhostAddr.sin_port = htons(NTP_CLIENT_PORT); //Random port
-  localhostAddr.sin_addr.s_addr = htonl(INADDR_ANY); //Any local address
-
-  if ( socket::bind( sock, (struct sockaddr*)&localhostAddr, sizeof(localhostAddr)) < 0 ) //Listen on local port
-  {
-    ERR("Could not bind socket");
-    socket::close(sock);
-    return NET_OOM;
-  }
+  UDPSocket sock;
+  sock.bind(0); //Bind to a random port
 
   struct NTPPacket pkt;
 
@@ -120,40 +82,24 @@ int NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   pkt.refTm_f = pkt.origTm_f = pkt.rxTm_f = pkt.txTm_f = 0;
 
   //Set timeout, non-blocking and wait using select
-  if( socket::sendto( sock, (void*)&pkt, sizeof(NTPPacket), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr) ) < 0 )
+  if( sock.sendTo( (char*)&pkt, sizeof(NTPPacket), host, port, NTP_REQUEST_TIMEOUT ) < 0 )
   {
     ERR("Could not send packet");
-    socket::close(sock);
+    sock.close();
     return NET_CONN;
-  }
-
-  //Wait for socket to be readable
-  //Creating FS set
-  fd_set socksSet;
-  FD_ZERO(&socksSet);
-  FD_SET(sock, &socksSet);
-  struct timeval t_val;
-  t_val.tv_sec = timeout / 1000;
-  t_val.tv_usec = (timeout - (t_val.tv_sec * 1000)) * 1000;
-  int ret = socket::select(FD_SETSIZE, &socksSet, NULL, NULL, &t_val);
-  if(ret <= 0 || !FD_ISSET(sock, &socksSet))
-  {
-    ERR("Timeout while waiting for answer");
-    socket::close(sock);
-    return NET_TIMEOUT; //Timeout
   }
 
   //Read response
   DBG("Pong");
-  struct sockaddr_in respAddr;
-  socklen_t respAddrLen = sizeof(respAddr);
+  char* inHost;
+  int inPort;
   do
   {
-    ret = socket::recvfrom( sock, (void*)&pkt, sizeof(NTPPacket), 0, (struct sockaddr*)&respAddr, &respAddrLen);
+    ret = sock.receiveFrom( (char*)&pkt, sizeof(NTPPacket), &inHost, inPort); //FIXME need a DNS Resolver to actually compare the incoming address with the DNS name
     if(ret < 0)
     {
       ERR("Could not receive packet");
-      socket::close(sock);
+      sock.close();
       return NET_CONN;
     }
   } while( respAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr);
@@ -161,14 +107,14 @@ int NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   if(ret < sizeof(NTPPacket)) //TODO: Accept chunks
   {
     ERR("Receive packet size does not match");
-    socket::close(sock);
+    sock.close();
     return NET_PROTOCOL;
   }
 
   if( pkt.stratum == 0)  //Kiss of death message : Not good !
   {
     ERR("Kissed to death!");
-    socket::close(sock);
+    sock.close();
     return NTP_PORT;
   }
 
@@ -195,7 +141,7 @@ int NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   INFO("Time is now (UTC): %s", ctime(&ctTime));
 #endif
 
-  socket::close(sock);
+  sock.close();
 
   return OK;
 }
