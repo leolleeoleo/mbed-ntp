@@ -1,33 +1,49 @@
 /* NTPClient.h */
-/*
-Copyright (C) 2012 ARM Limited.
+/* Copyright (C) 2012 mbed.org, MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+ * and associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+ * BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+/** \file
+NTP Client header file
 */
-
-#include "core/fwk.h"
 
 #ifndef NTPCLIENT_H_
 #define NTPCLIENT_H_
 
+#include <cstdint>
+
+using std::uint8_t;
+using std::uint16_t;
+using std::uint32_t;
+
+#include "UDPSocket.h"
+
 #define NTP_DEFAULT_PORT 123
 #define NTP_DEFAULT_TIMEOUT 4000
+
+///NTP client results
+enum NTPResult
+{
+  NTP_DNS, ///<Could not resolve name
+  NTP_PRTCL, ///<Protocol error
+  NTP_TIMEOUT, ///<Connection timeout
+  NTP_CONN, ///<Connection error
+  NTP_OK = 0, ///<Success
+};
 
 /** NTP Client to update the mbed's RTC using a remote time server
 *
@@ -46,9 +62,9 @@ public:
   @param host NTP server IPv4 address or hostname (will be resolved via DNS)
   @param port port to use; defaults to 123
   @param timeout waiting timeout in ms (osWaitForever for blocking function, not recommended)
-  @return 0 on success, NET error code (<0) on failure
+  @return 0 on success, NTP error code (<0) on failure
   */
-  int setTime(const char* host, uint16_t port = NTP_DEFAULT_PORT, uint32_t timeout = NTP_DEFAULT_TIMEOUT); //Blocking
+  NTPResult setTime(const char* host, uint16_t port = NTP_DEFAULT_PORT, uint32_t timeout = NTP_DEFAULT_TIMEOUT); //Blocking
 
 private:
   struct NTPPacket //See RFC 4330 for Simple NTP
@@ -77,6 +93,8 @@ private:
     uint32_t txTm_s;
     uint32_t txTm_f;
   } __attribute__ ((packed));
+  
+  UDPSocket m_sock;
 
 };
 
