@@ -18,7 +18,7 @@
  */
 
 //Debug is disabled by default
-#if 
+#if 0
 //Enable debug
 #define __DEBUG__
 #include <cstdio>
