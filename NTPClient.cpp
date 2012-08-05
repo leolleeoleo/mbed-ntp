@@ -62,7 +62,7 @@ NTPResult NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   DBG("Binding socket");
   m_sock.bind(0); //Bind to a random port
   
-  m_sock.set_blocking(true, timeout); //Set blocking
+  m_sock.set_blocking(false, timeout); //Set not blocking
 
   struct NTPPacket pkt;
 
