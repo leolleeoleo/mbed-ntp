@@ -36,6 +36,7 @@
 
 #include "NTPClient.h"
 
+#include "lwip/netif.h"
 #include "UDPSocket.h"
 
 #include "mbed.h" //time() and set_time()
@@ -44,7 +45,7 @@
 #define NTP_CLIENT_PORT 0 //Random port
 #define NTP_TIMESTAMP_DELTA 2208988800ull //Diff btw a UNIX timestamp (Starting Jan, 1st 1970) and a NTP timestamp (Starting Jan, 1st 1900)
 
-NTPClient::NTPClient() : m_sock()
+NTPClient::NTPClient(EthernetInterface *iface) : m_sock(), _iface(iface)
 {
 
 
@@ -62,7 +63,12 @@ NTPResult NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   DBG("Binding socket");
   m_sock.bind(0); //Bind to a random port
   
-  m_sock.set_blocking(false, timeout); //Set not blocking
+  m_sock.set_blocking(false); //Set not blocking
+  m_sock.set_timeout(timeout);
+  int conn = m_sock.open(_iface);
+  if (conn < 0) {
+      return NTP_CONN;
+  }
 
   struct NTPPacket pkt;
 
@@ -87,16 +93,16 @@ NTPResult NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
 
   pkt.refTm_f = pkt.origTm_f = pkt.rxTm_f = pkt.txTm_f = 0;
 
-  Endpoint outEndpoint;
-  
-  if( outEndpoint.set_address(host, port) < 0)
-  {
-    m_sock.close();
-    return NTP_DNS;
+
+  SocketAddress outSocketAddress;
+  nsapi_size_or_error_t err = _iface->gethostbyname(host, &outSocketAddress);
+  if (err) {
+      return NTP_DNS;
   }
+  outSocketAddress.set_port(port);
   
   //Set timeout, non-blocking and wait using select
-  int ret = m_sock.sendTo( outEndpoint, (char*)&pkt, sizeof(NTPPacket) );
+  int ret = m_sock.sendto(outSocketAddress, (char*)&pkt, sizeof(NTPPacket) );
   if (ret < 0 )
   {
     ERR("Could not send packet");
@@ -105,19 +111,19 @@ NTPResult NTPClient::setTime(const char* host, uint16_t port, uint32_t timeout)
   }
 
   //Read response
-  Endpoint inEndpoint;
+  SocketAddress inSocketAddress;
 
   DBG("Pong");
   do
   {
-    ret = m_sock.receiveFrom( inEndpoint, (char*)&pkt, sizeof(NTPPacket) ); //FIXME need a DNS Resolver to actually compare the incoming address with the DNS name
+    ret = m_sock.recvfrom( &inSocketAddress, (char*)&pkt, (nsapi_size_t) sizeof(NTPPacket) ); //FIXME need a DNS Resolver to actually compare the incoming address with the DNS name
     if(ret < 0)
     {
       ERR("Could not receive packet");
       m_sock.close();
       return NTP_CONN;
     }
-  } while( strcmp(outEndpoint.get_address(), inEndpoint.get_address()) != 0 );
+  } while( strcmp(inSocketAddress.get_ip_address(), inSocketAddress.get_ip_address()) != 0 );
 
   if(ret < sizeof(NTPPacket)) //TODO: Accept chunks
   {

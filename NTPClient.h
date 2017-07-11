@@ -24,13 +24,9 @@ NTP Client header file
 #ifndef NTPCLIENT_H_
 #define NTPCLIENT_H_
 
-#include <cstdint>
-
-using std::uint8_t;
-using std::uint16_t;
-using std::uint32_t;
 
 #include "UDPSocket.h"
+#include "EthernetInterface.h"
 
 #define NTP_DEFAULT_PORT 123
 #define NTP_DEFAULT_TIMEOUT 4000
@@ -54,7 +50,7 @@ public:
   /**
   Instantiate the NTP client
   */
-  NTPClient();
+  NTPClient(EthernetInterface *iface);
 
   /**Get current time (blocking)
   Update the time using the server host
@@ -95,6 +91,7 @@ private:
   } __attribute__ ((packed));
   
   UDPSocket m_sock;
+  EthernetInterface *_iface;
 
 };
 
